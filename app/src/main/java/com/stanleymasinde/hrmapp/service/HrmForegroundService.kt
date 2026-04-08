@@ -37,6 +37,9 @@ class HrmForegroundService : Service() {
     private val _isConnected = MutableStateFlow(false)
     val isConnected = _isConnected.asStateFlow()
 
+    private val _isMeasuring = MutableStateFlow(false)
+    val isMeasuring = _isMeasuring.asStateFlow()
+
     private val _isSensorAvailable = MutableStateFlow(false)
     val isSensorAvailable = _isSensorAvailable.asStateFlow()
 
@@ -84,6 +87,24 @@ class HrmForegroundService : Service() {
                 _isAdvertising.value = advertising
                 refreshStatusMessage()
             }
+            onMeasurementDemandChanged = { demanded ->
+                if (demanded) {
+                    val hrStarted = hrDataSource.start()
+                    if (hrStarted) {
+                        _isMeasuring.value = true
+                        refreshStatusMessage()
+                    } else {
+                        handleStartupFailure()
+                    }
+                } else {
+                    _isMeasuring.value = false
+                    _isSensorAvailable.value = false
+                    _heartRate.value = 0
+                    hrDataSource.stop()
+                    refreshStatusMessage()
+                    updateNotification(0)
+                }
+            }
             onError = { message ->
                 Log.e(TAG, message)
                 _statusMessage.value = message
@@ -122,11 +143,10 @@ class HrmForegroundService : Service() {
                 _heartRate.value = 0
                 _isConnected.value = false
                 _isAdvertising.value = false
+                _isMeasuring.value = false
                 _isSensorAvailable.value = false
-                refreshStatusMessage()
                 val bleStarted = bleHrmServer.start()
-                val hrStarted = hrDataSource.start()
-                if (bleStarted && hrStarted) {
+                if (bleStarted) {
                     _isRunning.value = true
                     refreshStatusMessage()
                 } else {
@@ -165,7 +185,12 @@ class HrmForegroundService : Service() {
             this, 0, stopIntent, PendingIntent.FLAG_IMMUTABLE
         )
 
-        val contentText = if (bpm > 0) "Current HR: $bpm BPM" else "Waiting for connection..."
+        val contentText = when {
+            bpm > 0 -> "Current HR: $bpm BPM"
+            !_isConnected.value -> "Waiting for receiver..."
+            !_isMeasuring.value -> "Waiting for receiver subscription..."
+            else -> "Waiting for heart rate..."
+        }
         
         return NotificationCompat.Builder(this, CHANNEL_ID)
             .setContentTitle("HRM Broadcasting")
@@ -196,6 +221,7 @@ class HrmForegroundService : Service() {
         _isRunning.value = false
         _isAdvertising.value = false
         _isConnected.value = false
+        _isMeasuring.value = false
         _isSensorAvailable.value = false
         _heartRate.value = 0
         refreshStatusMessage()
@@ -208,6 +234,7 @@ class HrmForegroundService : Service() {
         _isRunning.value = false
         _isAdvertising.value = false
         _isConnected.value = false
+        _isMeasuring.value = false
         _isSensorAvailable.value = false
         _heartRate.value = 0
         bleHrmServer.stop()
@@ -219,10 +246,13 @@ class HrmForegroundService : Service() {
     private fun refreshStatusMessage() {
         _statusMessage.value = when {
             !_isRunning.value -> "Ready to broadcast"
+            !_isConnected.value -> {
+                if (_isAdvertising.value) "Advertising BLE..." else "Preparing BLE..."
+            }
+            !_isMeasuring.value -> "Connected, waiting for receiver"
             _heartRate.value > 0 || _isSensorAvailable.value -> {
                 if (_isConnected.value) "Connected to receiver" else "Advertising BLE..."
             }
-            _isAdvertising.value -> "Waiting for heart rate..."
             else -> "Preparing BLE..."
         }
     }

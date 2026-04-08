@@ -98,6 +98,9 @@ fun MainScreen() {
     val isRunningState = hrmService?.isRunning?.collectAsState(initial = false)
     val isRunning = isRunningState?.value ?: false
 
+    val isMeasuringState = hrmService?.isMeasuring?.collectAsState(initial = false)
+    val isMeasuring = isMeasuringState?.value ?: false
+
     val isSensorAvailableState = hrmService?.isSensorAvailable?.collectAsState(initial = false)
     val isSensorAvailable = isSensorAvailableState?.value ?: false
 
@@ -191,12 +194,15 @@ fun MainScreen() {
                 if (isRunning) {
                     Text(
                         text = when {
+                            !isMeasuring -> "Waiting for receiver subscription"
                             heartRate > 0 -> "Sensor active"
                             isSensorAvailable -> "Waiting for heart rate..."
                             else -> "Check watch fit and sensor access"
                         },
                         style = MaterialTheme.typography.bodySmall,
-                        color = if (heartRate > 0 || isSensorAvailable) {
+                        color = if (!isMeasuring) {
+                            Color.LightGray
+                        } else if (heartRate > 0 || isSensorAvailable) {
                             Color(0xFF00E676)
                         } else {
                             Color.LightGray

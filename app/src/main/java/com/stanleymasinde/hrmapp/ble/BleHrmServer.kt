@@ -32,6 +32,7 @@ class BleHrmServer(private val context: Context) {
 
     var onConnectionStateChanged: ((Boolean) -> Unit)? = null
     var onAdvertisingStateChanged: ((Boolean) -> Unit)? = null
+    var onMeasurementDemandChanged: ((Boolean) -> Unit)? = null
     var onError: ((String) -> Unit)? = null
 
     private val gattServerCallback = object : BluetoothGattServerCallback() {
@@ -49,6 +50,7 @@ class BleHrmServer(private val context: Context) {
                 connectedDevice = null
                 notificationsEnabled = false
                 onConnectionStateChanged?.invoke(false)
+                onMeasurementDemandChanged?.invoke(false)
                 // Restart advertising so other devices (or the same one) can reconnect
                 startAdvertising()
             }
@@ -67,6 +69,7 @@ class BleHrmServer(private val context: Context) {
             if (HrmUuids.CCCD == descriptor.uuid) {
                 notificationsEnabled = value.contentEquals(BluetoothGattDescriptor.ENABLE_NOTIFICATION_VALUE)
                 Log.d(TAG, "Notifications enabled: $notificationsEnabled")
+                onMeasurementDemandChanged?.invoke(notificationsEnabled)
 
                 if (responseNeeded) {
                     try {
@@ -160,10 +163,10 @@ class BleHrmServer(private val context: Context) {
         }
 
         val settings = AdvertiseSettings.Builder()
-            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_LOW_LATENCY)
+            .setAdvertiseMode(AdvertiseSettings.ADVERTISE_MODE_BALANCED)
             .setConnectable(true)
             .setTimeout(0)
-            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_HIGH)
+            .setTxPowerLevel(AdvertiseSettings.ADVERTISE_TX_POWER_MEDIUM)
             .build()
 
         val data = AdvertiseData.Builder()
@@ -188,6 +191,7 @@ class BleHrmServer(private val context: Context) {
         bluetoothGattServer = null
         connectedDevice = null
         notificationsEnabled = false
+        onMeasurementDemandChanged?.invoke(false)
     }
 
     @SuppressLint("MissingPermission")
